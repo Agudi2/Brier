@@ -13,7 +13,7 @@ from recorder.auth import HeaderSigner
 from recorder.ratelimit import Backoff, TokenBucket
 
 _API_ROOT = "/trade-api/v2"
-_TICKER = r"[A-Za-z0-9_-]+"
+_TICKER = r"[A-Za-z0-9_-][A-Za-z0-9_.-]*"
 _ALLOWED = re.compile(
     rf"(?:/markets(?:/{_TICKER}(?:/orderbook)?)?"
     rf"|/events(?:/{_TICKER})?"

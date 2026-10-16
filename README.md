@@ -58,8 +58,8 @@ python -m study.calibration --horizons 24h 6h 1h
 ## Development
 
 Requires Python 3.12, uv, CMake 3.25+, and GCC 13+ or Clang 17+ on Linux or macOS.
-Stage 0 provides scaffolding and smoke tests. The Run commands above describe
-later stages; recorder, replay, and study commands are not implemented yet.
+The recorder and compactor are available. Engine replay and study commands above
+will arrive in later stages.
 Replace `N` with the desired positive thread count when replay is available.
 
 ```bash
@@ -104,3 +104,16 @@ Test-first development proceeds one stage and phase at a time:
 
 CI runs Release, ASan/UBSan, and TSan builds plus Python tests and checks.
 Tests marked `slow` (pytest marker or CTest label) run only on the nightly schedule.
+
+Before recording, fill `config/markets.yaml` with tickers, series, or events. Set
+`KALSHI_API_KEY_ID` and exactly one of `KALSHI_PRIVATE_KEY_PATH` or
+`KALSHI_PRIVATE_KEY_PEM` in the environment. Credentials are never written to raw
+records. Stop with Ctrl-C to drain buffered records before exit.
+
+Recording defaults to `data/`, batches of 100 markets, and a REST snapshot every
+60 seconds per market. The default REST budget is 50 tokens/second with capacity
+10; a default-cost request uses 10 tokens. Configure `--output`, `--batch-size`,
+`--snapshot-interval`, `--token-rate`, and `--token-capacity` as needed within your
+API budget. The recorder uses uvloop when installed. Compaction writes typed
+Parquet into a directory named after the input without its `.ndjson` suffix;
+`--out DIR` overrides that location. See `docs/DATA_FORMAT.md` for schemas.
