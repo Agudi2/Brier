@@ -96,3 +96,41 @@ One dedicated thread owns buffered file I/O. The bounded queue blocks producers
 when full. Files are opened for append and rotated by each record's receipt date,
 so queued records crossing UTC midnight retain the correct day. Graceful SIGINT
 or SIGTERM stops recording and drains accepted records before closing files.
+
+## Engine parsing
+
+The C++ `parse_file(path, chunks)` API reads a regular file through a read-only
+memory mapping. Nominal byte chunks advance to newline boundaries; each worker
+uses its own simdjson On-Demand parser and padded line buffer. Worker concurrency
+is bounded by the hardware thread count. Results merge in source order, including
+when timestamps repeat or move backward. Chunk count does not change accepted
+events, ticker IDs, payload ordering, or diagnostics.
+
+`FileParseResult` owns its events, ticker strings, metadata strings, level lists,
+market-ID lists, and price ranges after the mapping is released. `Event` contains
+integer fields and ranges into those pools. Ticker IDs are dense in first accepted
+occurrence order; entries within a gap/resync ticker list preserve their order.
+Snapshot and REST level lists preserve source order. Prices and quantities use
+the shared exact fixed-point parsers. Optional prices use -1 for absence, so a
+zero price remains distinct. Optional text/market IDs use `no_id`.
+
+The parser recognizes sessions, market metadata, snapshots, deltas, trades, ticker
+updates, gaps, resyncs, and REST books. Known messages retain fields needed for
+replay; extra server fields remain available in raw NDJSON. Unknown WebSocket
+types (including subscription acknowledgements) and unknown envelope kinds are
+counted separately and ignored. Complete JSON syntax is checked even for ignored
+records and fields; ignored numeric fields require no floating-point conversion.
+
+Malformed lines produce one diagnostic each with a one-based physical line
+number. Accepted events carry a zero-based physical line index. Rejected records
+contribute no partial events, ticker IDs, or payloads. Blank lines are malformed;
+a final newline terminates its record without adding another line. LF, CRLF,
+empty files, and files without a final newline are supported. Unsupported envelope
+versions are malformed records. An explicit unsupported session pricing mode
+fails the entire parse with no partial output. Missing session fields are malformed.
+
+File access errors and a zero chunk count return error statuses. Resource
+exhaustion raises an exception after workers have joined; input buffers and the
+mapping are released by their owners. Parse files that remain stable or are only
+appended during the call; the mapped extent is the size observed when opening.
+Concurrent truncation of a mapped file is unsupported.

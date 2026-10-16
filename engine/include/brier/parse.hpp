@@ -43,10 +43,8 @@ struct FileParseResult {
 // are malformed. All session lines must use no_leg; it need not be the first
 // record in a daily file. LF and CRLF are accepted; a final LF adds no empty line.
 // Result pools own their data after the source file/mapping has been released.
-// Deliberate RED stub: returns a sentinel until implementation.
-[[nodiscard]] inline FileParseResult parse_file(const std::filesystem::path&,
-                                             std::size_t = 1) {
-    return {};
-}
+// Resource exhaustion raises an exception; malformed records are diagnostics.
+[[nodiscard]] FileParseResult parse_file(const std::filesystem::path& path,
+                                        std::size_t chunks = 1);
 
 }  // namespace brier
