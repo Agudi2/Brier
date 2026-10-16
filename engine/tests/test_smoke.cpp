@@ -3,3 +3,5 @@
 TEST(Scaffold, Cxx20Available) {
     EXPECT_GE(__cplusplus, 202002L);
 }
+
+#include "test_fixed_point.cpp"
