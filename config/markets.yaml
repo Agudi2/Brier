@@ -1,0 +1,4 @@
+# Select tickers, series, or events before recording. No live calls in scaffolding.
+tickers: []
+series: []
+events: []

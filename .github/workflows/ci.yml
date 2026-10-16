@@ -1,0 +1,59 @@
+name: CI
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cpp:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: Release
+            sanitizer: none
+          - build_type: Debug
+            sanitizer: address
+          - build_type: Debug
+            sanitizer: thread
+    env:
+      CC: gcc-13
+      CXX: g++-13
+      ASAN_OPTIONS: detect_leaks=1
+      UBSAN_OPTIONS: halt_on_error=1
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DBRIER_SANITIZER=${{ matrix.sanitizer }}
+      - run: cmake --build build --parallel 2
+      - name: Test
+        run: |
+          if [ "${{ github.event_name }}" = schedule ]; then
+            ctest --test-dir build --output-on-failure
+          else
+            ctest --test-dir build --output-on-failure -LE slow
+          fi
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.14"
+          python-version: "3.12"
+      - run: uv sync --locked --all-extras
+      - name: Test
+        run: |
+          if [ "${{ github.event_name }}" = schedule ]; then
+            uv run pytest
+          else
+            uv run pytest -m 'not slow'
+          fi
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy

@@ -13,14 +13,15 @@ A C++ order book engine and calibration study for Kalshi prediction markets. Bri
 
 ## Components
 
-- **Recorder (Python):** authenticated WebSocket for book deltas, trades, and ticker. Timestamps every message, detects sequence gaps, resyncs from REST snapshots, writes to Parquet. API key comes from env vars only.
-- **Engine (C++20):** replays the stream, keeps YES and NO bid ladders, derives implied asks ($1 minus the opposite best bid), uses integer ticks with no floating point, and validates against REST snapshots.
-- **Study (Python):** settled markets priced at fixed horizons before close. Produces reliability diagrams, Brier score, and log loss, with a cluster bootstrap by event and date-based splits for any predictive test.
+- **Recorder (Python):** authenticated WebSocket for book deltas, trades, and ticker. Timestamps every message, detects sequence gaps, resyncs from REST snapshots, writes raw NDJSON as the source of truth, which `recorder.compact` converts to Parquet for analysis. API key comes from env vars only.
+- **Engine (C++20):** replays markets in parallel across threads, keeps YES and NO bid ladders on each market's price grid (from Kalshi's `price_ranges`), derives implied asks ($1 minus the opposite best bid in Kalshi's default no-leg pricing), uses integer prices in $0.0001 ticks and quantities in hundredths of a contract (no floating point), and validates against REST snapshots.
+- **Study (Python):** settled markets come from live recordings plus a read-only REST backfill, priced at fixed horizons before the SCHEDULED close, so an early close can't leak the outcome. Produces reliability diagrams, Brier score, and log loss, with a cluster bootstrap by event and date-based splits for any predictive test.
 
 ## Results
 
 | Metric | Value |
 |---|---|
+| Sample (markets / events / date range) | TBD |
 | Book match rate vs REST snapshots | TBD |
 | Replay throughput | TBD msgs/s |
 | Update latency p50 / p99 | TBD / TBD |
@@ -41,8 +42,10 @@ Benchmark setup is in `engine/bench/README.md`. Null results are reported as nul
 
 ```bash
 python -m recorder.run --markets config/markets.yaml
+python -m recorder.compact data/2026-10-01.ndjson
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
-./build/brier_replay data/2026-10-01.ndjson --validate
+./build/brier_replay data/2026-10-01.ndjson --validate --threads N
+python -m study.backfill
 python -m study.calibration --horizons 24h 6h 1h
 ```
 
@@ -51,3 +54,53 @@ python -m study.calibration --horizons 24h 6h 1h
 - Snowberg and Wolfers, "Explaining the Favorite-Longshot Bias," JPE 2010
 - Cont, Kukanov, and Stoikov, "The Price Impact of Order Book Events," 2014
 - Kalshi API docs: https://docs.kalshi.com
+
+## Development
+
+Requires Python 3.12, uv, CMake 3.25+, and GCC 13+ or Clang 17+ on Linux or macOS.
+Stage 0 provides scaffolding and smoke tests. The Run commands above describe
+later stages; recorder, replay, and study commands are not implemented yet.
+Replace `N` with the desired positive thread count when replay is available.
+
+```bash
+uv sync
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+uv run pytest -m 'not slow'
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+git config core.hooksPath .githooks
+```
+
+Run `uv run pre-commit run --all-files` before committing; the repository commit
+message hook is enabled by the hooks-path command. The pre-commit checks can be
+run manually with that command regardless of the configured hooks path.
+Optional event-loop support: `uv sync --extra uvloop`. Release builds use `-O3`
+and IPO/LTO; add `-DBRIER_NATIVE=ON` to tune for the build machine.
+
+Separate sanitizer builds:
+
+```bash
+cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DBRIER_SANITIZER=address
+cmake --build build-asan --parallel
+ctest --test-dir build-asan --output-on-failure
+cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug -DBRIER_SANITIZER=thread
+cmake --build build-tsan --parallel
+ctest --test-dir build-tsan --output-on-failure
+```
+
+Test-first development proceeds one stage and phase at a time:
+
+1. RED: write tests, fixtures, and minimal stubs; verify the expected failures.
+2. Review and commit RED, then tag it: `git tag stage-NN-red` (for example, `stage-01-red`).
+3. Independently review the tests before starting GREEN.
+4. GREEN: implement with tests, fixtures, and tested signatures unchanged.
+5. Run CTest, pytest, sanitizer builds, ruff, mypy, and
+   `scripts/check_tests_frozen.sh stage-NN-red`.
+6. Review the changes and commit GREEN. Any test correction gets a separate
+   test commit and review before implementation continues.
+
+CI runs Release, ASan/UBSan, and TSan builds plus Python tests and checks.
+Tests marked `slow` (pytest marker or CTest label) run only on the nightly schedule.

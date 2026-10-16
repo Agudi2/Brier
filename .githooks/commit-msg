@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+    echo "usage: $0 <commit-message-file>" >&2
+    exit 2
+fi
+if LC_ALL=C grep -Eiq 'Co-authored-by:|Generated (with|by)' "$1"; then
+    echo "Commit message contains a prohibited authorship or generation marker." >&2
+    exit 1
+fi

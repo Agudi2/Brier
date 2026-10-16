@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "brier"
+version = "0.1.0"
+description = "Read-only market-data recorder, order book engine, and calibration study"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "websockets>=14,<17", "httpx>=0.28,<1", "orjson>=3.10,<4",
+  "cryptography>=44", "pyyaml>=6,<7", "polars>=1,<2", "pyarrow>=19",
+  "numpy>=2,<3", "matplotlib>=3.9,<4",
+]
+
+[project.optional-dependencies]
+uvloop = ["uvloop>=0.21; sys_platform != 'win32'"]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2", "hypothesis>=6,<7",
+       "ruff>=0.9", "mypy>=1.14,<2", "types-PyYAML>=6", "pre-commit>=4,<5"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["brierlib", "recorder", "study"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
+markers = ["slow: statistical coverage and long-running tests (nightly only)"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["brierlib", "recorder", "study", "tests"]
