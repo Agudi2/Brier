@@ -5,3 +5,5 @@ TEST(Scaffold, Cxx20Available) {
 }
 
 #include "test_fixed_point.cpp"
+
+#include "test_grid.cpp"
