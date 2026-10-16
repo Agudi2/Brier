@@ -1,0 +1,4 @@
+{"v":1,"kind":"session","t_recv_ns":1,"conn":1,"event":"open","pricing_mode":"no_leg"}
+{"v":1,"kind":"resync","t_recv_ns":2,"tickers":["A"]}
+{"v":1,"kind":"session","t_recv_ns":3,"conn":2,"event":"open","pricing_mode":"yes_leg"}
+{"v":1,"kind":"resync","t_recv_ns":4,"tickers":["B"]}

@@ -1,0 +1,13 @@
+{"v":1,"kind":"resync","t_recv_ns":1,"tickers":["GOOD"]}
+{"v":
+
+[]
+{"v":2,"kind":"resync","t_recv_ns":2,"tickers":["GHOST"]}
+{"v":1,"kind":"resync","t_recv_ns":"bad","tickers":["GHOST"]}
+{"v":1,"kind":"ws","t_recv_ns":3,"t_mono_ns":3,"conn":1,"msg":{"type":"orderbook_delta","sid":1,"seq":1,"msg":{"market_ticker":"GHOST","price_dollars":"0.12345","delta_fp":"1.00","side":"yes"}}}
+{"v":1,"kind":"ws","t_recv_ns":4,"t_mono_ns":4,"conn":1,"msg":{"type":"orderbook_snapshot","sid":1,"seq":2,"msg":{"market_ticker":"GHOST","yes_dollars_fp":[["0.3000","1.55"],["bad","2.00"]],"no_dollars_fp":[]}}}
+{"v":1,"kind":"rest_book","t_recv_ns":5,"t_send_ns":4,"ticker":"GHOST","book":{"orderbook_fp":{"yes_dollars":[["0.2000","1.00"]],"no_dollars":[["0.8000","-0.01"]]}}}
+{"v":1,"kind":"resync","t_recv_ns":6,"tickers":["GHOST",5]}
+{"v":1,"kind":"ws","t_recv_ns":7,"conn":1,"msg":{"type":"future_public","msg":{}}} trailing garbage
+{"v":1,"kind":"ws","t_recv_ns":8,"conn":1,"msg":{"type":"ticker","sid":4,"msg":{"market_ticker":"NEXT","price_dollars":"0.5000"}}}
+{"v":1,"kind":"rest_book","t_recv_ns":10,"t_send_ns":9,"ticker":"GOOD","book":{"orderbook_fp":{"yes_dollars":[],"no_dollars":[]}}}

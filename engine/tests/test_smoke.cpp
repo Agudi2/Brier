@@ -9,3 +9,5 @@ TEST(Scaffold, Cxx20Available) {
 #include "test_grid.cpp"
 
 #include "test_book.cpp"
+
+#include "test_parse.cpp"
