@@ -1,0 +1,15 @@
+{"v":1,"kind":"session","t_recv_ns":100,"t_mono_ns":200,"conn":1,"event":"open","pricing_mode":"no_leg"}
+{"v":1,"kind":"market_meta","t_recv_ns":101,"ticker":"A","event_ticker":"E","price_ranges":[{"start":"0.0000","end":"1.0000","step":"0.0100"}]}
+{"v":1,"kind":"ws","t_recv_ns":102,"t_mono_ns":202,"conn":1,"msg":{"id":1,"type":"subscribed","msg":{"channel":"orderbook_delta","sid":7}}}
+{"v":1,"kind":"ws","t_recv_ns":103,"t_mono_ns":203,"conn":1,"msg":{"type":"orderbook_snapshot","sid":7,"seq":1,"msg":{"market_ticker":"A","yes_dollars_fp":[["0.3000","1.55"]],"no_dollars_fp":[["0.6800","2.00"]]}}}
+{"v":1,"kind":"ws","t_recv_ns":104,"t_mono_ns":204,"conn":1,"msg":{"type":"orderbook_delta","sid":7,"seq":2,"msg":{"market_ticker":"A","price_dollars":"0.3000","delta_fp":"-1.55","side":"yes"}}}
+{"v":1,"kind":"ws","t_recv_ns":105,"t_mono_ns":205,"conn":1,"msg":{"type":"orderbook_delta","sid":7,"seq":3,"msg":{"market_ticker":"A","price_dollars":"0.6800","delta_fp":"2.00","side":"no"}}}
+{"v":1,"kind":"ws","t_recv_ns":106,"t_mono_ns":206,"conn":1,"msg":{"type":"trade","sid":8,"seq":1,"msg":{"market_ticker":"A","trade_id":"T1","yes_price_dollars":"0.3000","no_price_dollars":"0.7000","count_fp":"1.55","taker_side":"yes","ts_ms":1000}}}
+{"v":1,"kind":"ws","t_recv_ns":107,"t_mono_ns":207,"conn":1,"msg":{"type":"trade","sid":8,"seq":2,"msg":{"market_ticker":"A","trade_id":"T2","yes_price_dollars":"0.6400","no_price_dollars":"0.3600","count_fp":"0.01","taker_side":"no","ts_ms":1001}}}
+{"v":1,"kind":"ws","t_recv_ns":108,"t_mono_ns":208,"conn":1,"msg":{"type":"ticker","sid":9,"msg":{"market_ticker":"A","price_dollars":"0.3000","yes_bid_dollars":"0.2900","yes_ask_dollars":"0.3100","ts_ms":1002}}}
+{"v":1,"kind":"gap","t_recv_ns":109,"conn":1,"sid":7,"expected_seq":4,"got_seq":6,"tickers":["A"]}
+{"v":1,"kind":"resync","t_recv_ns":110,"tickers":["A"]}
+{"v":1,"kind":"rest_book","t_recv_ns":111,"t_send_ns":109,"ticker":"A","book":{"orderbook_fp":{"yes_dollars":[["0.3000","1.55"]],"no_dollars":[["0.6800","2.00"]]}}}
+{"v":1,"kind":"rest_book","t_recv_ns":112,"t_send_ns":110,"ticker":"B","book":{"orderbook_fp":{"yes_dollars":[],"no_dollars":[]}}}
+{"v":1,"kind":"session","t_recv_ns":113,"t_mono_ns":213,"conn":1,"event":"close","pricing_mode":"no_leg"}
+{"v":1,"kind":"ws","t_recv_ns":114,"t_mono_ns":214,"conn":1,"msg":{"type":"future_public","msg":{"new_field":1}}}
