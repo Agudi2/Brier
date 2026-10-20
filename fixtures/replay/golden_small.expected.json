@@ -1,0 +1,33 @@
+{
+  "markets": ["B", "A", "C"],
+  "summary": {
+    "schema_version": 1,
+    "physical_lines": 28,
+    "malformed_lines": 0,
+    "unknown_messages": 0,
+    "unknown_envelopes": 0,
+    "totals": {"snapshots": 6, "applied_deltas": 9, "dropped_deltas": 4, "invalid_updates": 0},
+    "markets": [
+      {"market_id": 0, "ticker": "B", "valid": true, "error": "none", "snapshots": 3, "applied_deltas": 3, "dropped_deltas": 1, "invalid_updates": 0, "yes": [[0, 1]], "no": [[10000, 2]]},
+      {"market_id": 1, "ticker": "A", "valid": true, "error": "none", "snapshots": 2, "applied_deltas": 5, "dropped_deltas": 3, "invalid_updates": 0, "yes": [[3100, 250]], "no": [[6900, 400]]},
+      {"market_id": 2, "ticker": "C", "valid": true, "error": "none", "snapshots": 1, "applied_deltas": 1, "dropped_deltas": 0, "invalid_updates": 0, "yes": [[1000, 150]], "no": [[8000, 100]]}
+    ]
+  },
+  "tob": [
+    [110, 0, 4000, 5000, 200, 300, 1, 5],
+    [110, 1, 3000, 3200, 155, 200, 1, 6],
+    [111, 2, 1000, 2000, 100, 100, 1, 7],
+    [113, 0, 4000, 5000, 250, 300, 1, 9],
+    [114, 1, 3000, 3200, 100, 200, 1, 10],
+    [120, 0, -1, -1, 0, 0, 0, 12],
+    [120, 1, -1, -1, 0, 0, 0, 12],
+    [124, 2, 1000, 2000, 150, 100, 1, 16],
+    [126, 1, 3100, 3100, 250, 400, 5, 18],
+    [127, 1, 3100, 3000, 250, 1, 3, 19],
+    [128, 1, 3100, 3100, 250, 400, 5, 20],
+    [130, 0, 4500, 4600, 100, 200, 1, 22],
+    [131, 0, -1, 4600, 0, 200, 1, 23],
+    [132, 0, -1, -1, 0, 0, 1, 24],
+    [133, 0, 0, 0, 1, 2, 5, 25]
+  ]
+}

@@ -11,3 +11,5 @@ TEST(Scaffold, Cxx20Available) {
 #include "test_book.cpp"
 
 #include "test_parse.cpp"
+
+#include "test_replay.cpp"

@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.25)
+project(BrierReplayAcceptance LANGUAGES CXX)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../.." engine)
+add_executable(brier_replay_cli_test "${CMAKE_CURRENT_LIST_DIR}/../../engine/src/main_replay.cpp")
+target_compile_features(brier_replay_cli_test PRIVATE cxx_std_20)
+target_link_libraries(brier_replay_cli_test PRIVATE brier_engine)
+set_target_properties(brier_replay_cli_test PROPERTIES OUTPUT_NAME brier_replay)
