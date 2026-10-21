@@ -1,4 +1,5 @@
 #include "brier/replay.hpp"
+#include "brier/validate.hpp"
 
 #include <algorithm>
 #include <array>
@@ -6,6 +7,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
+#include <limits>
 #include <locale>
 #include <optional>
 #include <string>
@@ -20,9 +23,9 @@ constexpr std::string_view usage =
     "  --threads N  Positive worker limit (default: 1)\n"
     "  --out DIR    Write summary.json and markets.json here\n"
     "  --tob        Also write packed little-endian top-of-book records to tob.bin\n"
-    "  --validate   Reserved for Stage 8; exits 5 until validation is available\n"
+    "  --validate   Compare REST windows and write validation.json\n"
     "  --help       Show this help\n"
-    "Exit codes: 0 success/help, 2 usage, 3 input, 4 output, 5 validation unavailable.\n";
+    "Exit codes: 0 success/help, 2 usage, 3 input/validation, 4 output.\n";
 
 struct Arguments {
     std::filesystem::path input, output = "replay_out";
@@ -161,6 +164,43 @@ void write_summary(const std::filesystem::path& path, const brier::FileParseResu
     out.close(); // Surface delayed write failures before reporting success.
 }
 
+void write_validation(const std::filesystem::path& path,
+                      const brier::ValidationResult& result) {
+    auto out = open_output(path);
+    out << std::setprecision(std::numeric_limits<double>::max_digits10);
+    out << "{\"schema_version\":1,\"samples\":" << result.samples
+        << ",\"compared\":" << result.compared
+        << ",\"excluded_invalid\":" << result.excluded_invalid
+        << ",\"full_depth_matches\":" << result.full_depth_matches
+        << ",\"top_of_book_matches\":" << result.top_of_book_matches
+        << ",\"mismatches\":" << result.mismatches
+        << ",\"full_depth_match_rate\":";
+    if (result.full_depth_match_rate) out << *result.full_depth_match_rate;
+    else out << "null";
+    out << ",\"top_of_book_match_rate\":";
+    if (result.top_of_book_match_rate) out << *result.top_of_book_match_rate;
+    else out << "null";
+    out << ",\"diffs\":[";
+    bool first = true;
+    for (const auto& diff : result.diffs) {
+        if (!first) out << ',';
+        first = false;
+        out << "{\"market_id\":" << diff.market_id
+            << ",\"rest_line_index\":" << diff.rest_line_index
+            << ",\"state_line_index\":" << diff.state_line_index << ",\"rest_yes\":";
+        levels(out, diff.rest_yes);
+        out << ",\"rest_no\":";
+        levels(out, diff.rest_no);
+        out << ",\"engine_yes\":";
+        levels(out, diff.engine_yes);
+        out << ",\"engine_no\":";
+        levels(out, diff.engine_no);
+        out << '}';
+    }
+    out << "]}\n";
+    out.close();
+}
+
 template<class T>
 void little_endian(std::ostream& out, T value) {
     // Conversion to unsigned is modulo 2^N, including the -1 price sentinel.
@@ -211,12 +251,9 @@ int main(int argc, char** argv) {
         std::cout << usage;
         return 0;
     }
-    if (args->validate) {
-        std::cerr << "Validation is unavailable until Stage 8.\n";
-        return 5;
-    }
     brier::FileParseResult input;
     brier::ReplayResult replay;
+    std::optional<brier::ValidationResult> validation;
     try {
         // Avoid allocating an unbounded chunk table for a user-supplied limit.
         const auto chunks = std::min(args->threads, static_cast<std::size_t>(
@@ -231,12 +268,20 @@ int main(int argc, char** argv) {
             std::cerr << "Invalid replay input.\n";
             return 3;
         }
+        if (args->validate) {
+            validation = brier::validate(input, {args->threads, 10});
+            if (validation->status != brier::ValidationStatus::ok) {
+                std::cerr << "Invalid validation input (including regressing receipt times).\n";
+                return 3;
+            }
+        }
     } catch (const std::exception& error) {
         std::cerr << "Input/replay failure: " << error.what() << '\n';
         return 3;
     }
     try {
         write_outputs(*args, input, replay);
+        if (validation) write_validation(args->output / "validation.json", *validation);
     } catch (const std::exception& error) {
         std::cerr << "Output failure: " << error.what() << '\n';
         return 4;

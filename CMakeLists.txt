@@ -59,7 +59,8 @@ set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(simdjson googletest benchmark)
 
 find_package(Threads REQUIRED)
-add_library(brier_engine STATIC engine/src/book.cpp engine/src/parse.cpp engine/src/replay.cpp)
+add_library(brier_engine STATIC engine/src/book.cpp engine/src/parse.cpp engine/src/replay.cpp
+  engine/src/validate.cpp)
 target_link_libraries(brier_engine PUBLIC brier_options PRIVATE simdjson Threads::Threads)
 
 add_executable(brier_replay engine/src/main_replay.cpp)

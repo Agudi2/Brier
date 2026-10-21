@@ -44,7 +44,7 @@ Benchmark setup is in `engine/bench/README.md`. Null results are reported as nul
 python -m recorder.run --markets config/markets.yaml
 python -m recorder.compact data/2026-10-01.ndjson
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
-./build/brier_replay data/2026-10-01.ndjson --threads N --out replay_out --tob
+./build/brier_replay data/2026-10-01.ndjson --threads N --out replay_out --tob --validate
 python -m study.backfill
 python -m study.calibration --horizons 24h 6h 1h
 ```
@@ -58,12 +58,15 @@ python -m study.calibration --horizons 24h 6h 1h
 ## Development
 
 Requires Python 3.12, uv, CMake 3.25+, and GCC 13+ or Clang 17+ on Linux or macOS.
-The recorder, compactor, and engine replay are available. Validation against REST
-snapshots and the study commands will arrive in later stages.
+The recorder, compactor, engine replay, and validation against REST snapshots are
+available. The study commands will arrive in later stages.
 Replace `N` with the desired positive worker limit. Replay writes `summary.json`
 and `markets.json`; `--tob` also writes `tob.bin`. Outputs are deterministic across
-thread counts. The default output directory is `replay_out`. `--validate` currently
-exits with code 5 because validation is scheduled for Stage 8.
+thread counts. The default output directory is `replay_out`. `--validate` additionally writes
+`validation.json` with full-depth and top-of-book match rates, excluded invalid
+windows, and the first ten mismatch diffs. A REST sample matches any valid stream
+state during its request window; mismatches are reported with a successful exit.
+Validation requires nondecreasing receipt timestamps.
 See [the data format](docs/DATA_FORMAT.md#engine-replay-and-outputs) for record
 layout, counters, and exit codes.
 

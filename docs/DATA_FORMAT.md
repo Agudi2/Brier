@@ -182,12 +182,12 @@ output files; only exit code 0 indicates success.
 | ---: | --- |
 | 0 | Success or help |
 | 2 | Invalid command-line arguments |
-| 3 | Input access, unsupported pricing mode, or input/replay failure |
+| 3 | Input access, unsupported pricing mode, or input/replay/validation failure |
 | 4 | Output I/O failure |
-| 5 | Validation requested but unavailable until Stage 8 |
 
-`--validate` is recognized and exits 5 before reading or writing files.
-Malformed individual lines are counted and skipped, rather than fatal.
+`--validate` additionally writes `validation.json` as described below. Mismatches
+are report data and do not change the successful exit code. Malformed individual
+lines are counted and skipped, rather than fatal.
 
 ### Top-of-book binary layout
 
@@ -231,3 +231,67 @@ tob_dtype = np.dtype(
 )
 rows = np.fromfile("replay_out/tob.bin", dtype=tob_dtype)
 ```
+
+
+## Validation against REST snapshots
+
+`--validate` compares each accepted REST sample against earlier stream states of
+its market during the inclusive `[t_send_ns, t_recv_ns]` window. The state active
+at request time persists until a stream update replaces it. Updates at receipt
+time are candidates only when they precede the REST sample in source-line order;
+later source lines cannot retroactively match. A state replaced exactly at the
+lower boundary is excluded, while states reached by updates on either boundary
+are included. Multiple updates at the same timestamp retain their source order.
+
+Full-depth matching requires both complete bid ladders to equal one candidate
+state. Levels from different states or markets are never combined. Ladders are
+canonicalized to descending prices with zero quantities omitted. Prices and
+quantities compare exactly as integers. Top-of-book matching independently
+compares the YES best bid and implied YES best ask, including quantities. Empty
+valid books can match; missing prices differ from price zero.
+
+REST `orderbook_fp.yes_dollars` and `no_dollars` are the respective YES and NO
+bid ladders. Compare the NO bids directly; complement them only when deriving
+YES asks. This convention is documented in Kalshi's
+[orderbook responses](https://docs.kalshi.com/getting_started/orderbook_responses)
+and [market orderbook endpoint](https://docs.kalshi.com/api-reference/market/get-market-orderbook).
+Use full-depth REST responses; truncated snapshots cannot establish full-depth
+equality.
+
+Gaps, resyncs, metadata changes, invalid updates, and stream recovery follow the
+replay rules above. Invalid states are ignored as candidates. Windows with no
+valid candidate are counted as `excluded_invalid` and omitted from denominators.
+A partially invalid window can still match a valid candidate, including a
+successful recovery snapshot inside the window. REST data never changes stream
+validity or quantities.
+
+`validation.json` uses schema version 1 and contains:
+
+- `samples`, `compared`, and `excluded_invalid`, where samples = compared + excluded.
+- `full_depth_matches`, `top_of_book_matches`, and `mismatches`, where mismatches =
+  compared - full_depth_matches.
+- `full_depth_match_rate` and `top_of_book_match_rate`: the respective match count
+  divided by compared, or JSON `null` when compared is zero.
+- `diffs`: the first ten full-depth mismatches in REST source-line order. Each
+  diff contains `market_id`, `rest_line_index`, `state_line_index`, `rest_yes`,
+  `rest_no`, `engine_yes`, and `engine_no`. Ladders are `[price_ticks, quantity]`
+  pairs. The reference engine state is the last valid candidate in source order.
+
+The API's `max_diffs` option can change the diagnostic limit without affecting
+counts. Validation workers own separate markets and merge reports in source order.
+Outputs are byte-identical across worker counts, and ordinary replay artifacts
+are identical with and without validation. The implementation evaluates active
+request windows as states change; it does not retain every historical full book.
+
+Validation requires source-line order with nondecreasing receipt timestamps.
+Regressing clocks, reversed REST windows, invalid market IDs or pool ranges,
+and invalid REST ladders (duplicates, negative quantities, or levels off the known
+market grid) fail validation with no partial report. When metadata has not yet
+arrived, REST levels receive basic price/quantity/duplicate checks and the stream
+has no valid state. Malformed raw lines have already been rejected by the parser
+and remain visible in the replay summary's malformed count.
+
+The CLI validates before writing outputs and returns exit code 3 on invalid
+validation input; write failures return 4 and may leave partial output files.
+Without `--validate`, an existing `validation.json` is left untouched. Use a fresh
+output directory when comparing runs.

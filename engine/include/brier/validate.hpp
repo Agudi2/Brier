@@ -23,9 +23,8 @@ struct ValidationResult {
     std::optional<double> full_depth_match_rate, top_of_book_match_rate;
     std::vector<ValidationDiff> diffs;
 };
-// See tests/engine/VALIDATION_CONTRACT.md for window and diagnostic semantics.
-// Deliberate RED stub: successful compilation with an assertion-visible sentinel.
-[[nodiscard]] inline ValidationResult validate(const FileParseResult&, ValidationOptions = {}) {
-    return {};
-}
+// Match against any valid stream state in the inclusive REST request window.
+// Windows with no valid state are excluded. Rates are absent if none compare.
+// Invalid input returns no partial report; worker exceptions propagate after join.
+[[nodiscard]] ValidationResult validate(const FileParseResult&, ValidationOptions = {});
 }  // namespace brier
