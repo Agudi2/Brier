@@ -134,3 +134,100 @@ exhaustion raises an exception after workers have joined; input buffers and the
 mapping are released by their owners. Parse files that remain stable or are only
 appended during the call; the mapped extent is the size observed when opening.
 Concurrent truncation of a mapped file is unsupported.
+
+## Engine replay and outputs
+
+Run `brier_replay INPUT [--threads N] [--out DIR] [--tob] [--validate]`.
+The default worker limit is 1 and the default output directory is `replay_out`,
+relative to the working directory. Actual concurrency is bounded by hardware
+threads and the number of markets. `--help` prints usage and exit codes.
+
+Events are partitioned by market in source-line order. Gap and resync records
+are applied once to each listed market, even if the list repeats an ID. Markets
+are sorted by decreasing event count (ties by market ID), then assigned greedily
+to the least-loaded worker (ties by worker index). Each worker owns its books
+and output buffer. Book updates use no locks; output buffers are reserved before
+replay. Receipt timestamps do not reorder book updates.
+
+A market requires price-range metadata and a successful stream snapshot before
+any deltas can apply. Gaps, resyncs, changed price ranges, and invalid updates
+invalidate its state until a new successful snapshot. Identical metadata retains
+the state. REST books, trades, ticker messages, and session boundaries do not
+change or restore a book. Invalid books expose empty final ladders.
+
+Outputs:
+
+- `markets.json`: a JSON string array, indexed by the parser's dense market ID.
+- `summary.json`: schema version 1, physical and malformed line counts,
+  unknown-message and unknown-envelope counts, totals, and market records in
+  market-ID order. Each market contains its ID, ticker, validity, error name,
+  counters, and descending YES/NO bid ladders as `[price_ticks, quantity]` pairs.
+- `tob.bin`: created only with `--tob`, using the layout below.
+
+Counters are `snapshots` (successful stream snapshots), `applied_deltas` (all
+successful deltas, including zero and non-top changes), `dropped_deltas` (deltas
+while unsynchronized), and `invalid_updates` (failed updates, including snapshots
+without metadata). Summary totals are the sums of market counters. Invalid
+updates retain their `BookError` name; gaps and changed metadata use
+`invalid_book`. A successful snapshot clears the error to `none`.
+
+Outputs contain no thread counts, execution timings, input paths, or generation
+timestamps. For a fixed input and flags they are byte-identical across worker
+counts. Files of the same name in the chosen output directory are overwritten.
+Without `--tob`, an existing `tob.bin` is left untouched; use a fresh directory
+to avoid mixing artifacts from separate runs. A failed write can leave partial
+output files; only exit code 0 indicates success.
+
+| Exit code | Meaning |
+| ---: | --- |
+| 0 | Success or help |
+| 2 | Invalid command-line arguments |
+| 3 | Input access, unsupported pricing mode, or input/replay failure |
+| 4 | Output I/O failure |
+| 5 | Validation requested but unavailable until Stage 8 |
+
+`--validate` is recognized and exits 5 before reading or writing files.
+Malformed individual lines are counted and skipped, rather than fatal.
+
+### Top-of-book binary layout
+
+Each record is exactly 40 bytes, little-endian, without alignment padding or a
+header. Fields are serialized individually; native struct memory is never dumped.
+Prices are integer ticks of $0.0001; quantities are integer hundredths of a
+contract. YES ask is 10000 minus the highest NO bid and retains its quantity.
+
+| Field | Byte offset | Type |
+| --- | ---: | --- |
+| t_recv_ns | 0 | int64 |
+| market_id | 8 | uint32 |
+| yes_bid | 12 | int32 |
+| yes_ask | 16 | int32 |
+| bid_qty | 20 | int64 |
+| ask_qty | 28 | int64 |
+| flags | 36 | uint32 |
+
+Flag bits are 1 for valid, 2 for crossed, and 4 for locked. Missing prices use -1;
+zero is a valid price. Invalid rows have prices -1, quantities 0, and flags 0.
+A valid empty book has flags 1. Emit only when a price, quantity, or flags value
+changes; the initial invalid state is unreported. Rows are sorted by
+`(t_recv_ns, source_line_index, market_id)` after replay. The last key resolves
+multi-market invalidations from the same source line. The source-line index is
+an internal merge key and is omitted from the binary file.
+
+```python
+import numpy as np
+
+tob_dtype = np.dtype(
+    [
+        ("t_recv_ns", "<i8"),
+        ("market_id", "<u4"),
+        ("yes_bid", "<i4"),
+        ("yes_ask", "<i4"),
+        ("bid_qty", "<i8"),
+        ("ask_qty", "<i8"),
+        ("flags", "<u4"),
+    ],
+    align=False,
+)
+rows = np.fromfile("replay_out/tob.bin", dtype=tob_dtype)
+```

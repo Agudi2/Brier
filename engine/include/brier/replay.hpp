@@ -48,9 +48,6 @@ struct ReplayResult {
 // TOB starts from an unreported invalid state; emit only when prices, quantities,
 // or flags change. Invalid rows have prices -1, quantities 0, flags 0. Valid empty
 // books use flag 1. Merge rows by (t_recv_ns, line_index, market_id).
-// Deliberate RED stub.
-[[nodiscard]] inline ReplayResult replay(const FileParseResult&, ReplayOptions = {}) {
-    return {};
-}
+[[nodiscard]] ReplayResult replay(const FileParseResult&, ReplayOptions = {});
 
 }  // namespace brier

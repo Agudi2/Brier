@@ -44,7 +44,7 @@ Benchmark setup is in `engine/bench/README.md`. Null results are reported as nul
 python -m recorder.run --markets config/markets.yaml
 python -m recorder.compact data/2026-10-01.ndjson
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
-./build/brier_replay data/2026-10-01.ndjson --validate --threads N
+./build/brier_replay data/2026-10-01.ndjson --threads N --out replay_out --tob
 python -m study.backfill
 python -m study.calibration --horizons 24h 6h 1h
 ```
@@ -58,9 +58,14 @@ python -m study.calibration --horizons 24h 6h 1h
 ## Development
 
 Requires Python 3.12, uv, CMake 3.25+, and GCC 13+ or Clang 17+ on Linux or macOS.
-The recorder and compactor are available. Engine replay and study commands above
-will arrive in later stages.
-Replace `N` with the desired positive thread count when replay is available.
+The recorder, compactor, and engine replay are available. Validation against REST
+snapshots and the study commands will arrive in later stages.
+Replace `N` with the desired positive worker limit. Replay writes `summary.json`
+and `markets.json`; `--tob` also writes `tob.bin`. Outputs are deterministic across
+thread counts. The default output directory is `replay_out`. `--validate` currently
+exits with code 5 because validation is scheduled for Stage 8.
+See [the data format](docs/DATA_FORMAT.md#engine-replay-and-outputs) for record
+layout, counters, and exit codes.
 
 ```bash
 uv sync
