@@ -188,7 +188,91 @@ def test_input_and_output_errors_have_distinct_exit_codes(replay_cli: Path, tmp_
     assert blocked.read_text() == "keep this file"
 
 
-def test_validate_flag_reports_pending_stage_eight(replay_cli: Path, tmp_path: Path) -> None:
-    run = invoke(replay_cli, str(GOLDEN), "--validate", cwd=tmp_path)
-    assert run.returncode == 5
-    assert "validat" in run.stderr.lower()
+@pytest.mark.parametrize("threads", [1, 2, 8])
+def test_validation_report_matches_hand_calculation(
+    replay_cli: Path, tmp_path: Path, threads: int
+) -> None:
+    source = ROOT / "fixtures/replay/validation_windows.ndjson"
+    out = tmp_path / "validated"
+    plain = tmp_path / "plain"
+    run = invoke(
+        replay_cli,
+        str(source),
+        "--validate",
+        "--threads",
+        str(threads),
+        "--out",
+        str(out),
+        "--tob",
+        cwd=tmp_path,
+    )
+    assert run.returncode == 0, run.stderr
+    oracle = json.loads((ROOT / "fixtures/replay/validation_windows.expected.json").read_text())
+    assert json.loads((out / "validation.json").read_text()) == oracle
+    # Worker counts must not change the report bytes, including diff ordering.
+    single = tmp_path / "single"
+    run = invoke(replay_cli, str(source), "--validate", "--out", str(single), cwd=tmp_path)
+    assert run.returncode == 0, run.stderr
+    assert (out / "validation.json").read_bytes() == (single / "validation.json").read_bytes()
+    run = invoke(replay_cli, str(source), "--out", str(plain), "--tob", cwd=tmp_path)
+    assert run.returncode == 0, run.stderr
+    assert not (plain / "validation.json").exists()
+    for name in ("summary.json", "markets.json", "tob.bin"):
+        assert (out / name).read_bytes() == (plain / name).read_bytes()
+
+
+def test_validation_empty_rates_are_json_null(replay_cli: Path, tmp_path: Path) -> None:
+    source = tmp_path / "empty.ndjson"
+    source.write_text("")
+    out = tmp_path / "out"
+    run = invoke(replay_cli, str(source), "--validate", "--out", str(out), cwd=tmp_path)
+    assert run.returncode == 0, run.stderr
+    assert json.loads((out / "validation.json").read_text()) == {
+        "schema_version": 1,
+        "samples": 0,
+        "compared": 0,
+        "excluded_invalid": 0,
+        "full_depth_matches": 0,
+        "top_of_book_matches": 0,
+        "mismatches": 0,
+        "full_depth_match_rate": None,
+        "top_of_book_match_rate": None,
+        "diffs": [],
+    }
+
+
+def test_validation_default_diff_limit_does_not_limit_counts(
+    replay_cli: Path, tmp_path: Path
+) -> None:
+    records = [
+        json.loads(line)
+        for line in (ROOT / "fixtures/replay/validation_windows.ndjson").read_text().splitlines()
+    ]
+    for i in range(12):
+        sample = dict(records[7])  # YES 5000 mismatches the recovered stream best 4000.
+        sample.update(t_send_ns=101 + i, t_recv_ns=102 + i)
+        records.append(sample)
+    source = tmp_path / "many.ndjson"
+    source.write_text("\n".join(json.dumps(row) for row in records) + "\n")
+    out = tmp_path / "out"
+    run = invoke(replay_cli, str(source), "--validate", "--out", str(out), cwd=tmp_path)
+    assert run.returncode == 0, run.stderr  # Mismatches are report data, not process errors.
+    report = json.loads((out / "validation.json").read_text())
+    assert report["samples"] == 7 + 12
+    assert report["compared"] == 5 + 12
+    assert report["mismatches"] == 2 + 12
+    assert len(report["diffs"]) == 10
+    assert [diff["rest_line_index"] for diff in report["diffs"]] == [6, 7, *range(12, 20)]
+
+
+def test_validation_rejects_regressing_clock(replay_cli: Path, tmp_path: Path) -> None:
+    records = [
+        json.loads(line)
+        for line in (ROOT / "fixtures/replay/validation_windows.ndjson").read_text().splitlines()
+    ]
+    records[-1].update(t_send_ns=1, t_recv_ns=2)  # Well-formed window, regressing receipt clock.
+    source = tmp_path / "regressed.ndjson"
+    source.write_text("\n".join(json.dumps(row) for row in records) + "\n")
+    run = invoke(replay_cli, str(source), "--validate", cwd=tmp_path)
+    assert run.returncode == 3, run.stderr
+    assert not (tmp_path / "replay_out/validation.json").exists()

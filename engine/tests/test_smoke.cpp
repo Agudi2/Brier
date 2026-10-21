@@ -13,3 +13,5 @@ TEST(Scaffold, Cxx20Available) {
 #include "test_parse.cpp"
 
 #include "test_replay.cpp"
+
+#include "test_validate.cpp"

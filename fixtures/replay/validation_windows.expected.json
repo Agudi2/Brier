@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "samples": 7,
+  "compared": 5,
+  "excluded_invalid": 2,
+  "full_depth_matches": 3,
+  "top_of_book_matches": 4,
+  "mismatches": 2,
+  "full_depth_match_rate": 0.6,
+  "top_of_book_match_rate": 0.8,
+  "diffs": [
+    {
+      "market_id": 0,
+      "rest_line_index": 6,
+      "state_line_index": 4,
+      "rest_yes": [
+        [
+          4000,
+          150
+        ],
+        [
+          2000,
+          999
+        ]
+      ],
+      "rest_no": [
+        [
+          6500,
+          300
+        ]
+      ],
+      "engine_yes": [
+        [
+          4000,
+          150
+        ],
+        [
+          2000,
+          200
+        ]
+      ],
+      "engine_no": [
+        [
+          6500,
+          300
+        ]
+      ]
+    },
+    {
+      "market_id": 0,
+      "rest_line_index": 7,
+      "state_line_index": 4,
+      "rest_yes": [
+        [
+          5000,
+          150
+        ],
+        [
+          2000,
+          200
+        ]
+      ],
+      "rest_no": [
+        [
+          6500,
+          300
+        ]
+      ],
+      "engine_yes": [
+        [
+          4000,
+          150
+        ],
+        [
+          2000,
+          200
+        ]
+      ],
+      "engine_no": [
+        [
+          6500,
+          300
+        ]
+      ]
+    }
+  ]
+}
