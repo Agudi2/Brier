@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace brier {
@@ -46,5 +47,9 @@ struct FileParseResult {
 // Resource exhaustion raises an exception; malformed records are diagnostics.
 [[nodiscard]] FileParseResult parse_file(const std::filesystem::path& path,
                                         std::size_t chunks = 1);
+
+// One in-memory JSON record without a line terminator; no mapping or file I/O.
+// Includes parser setup, syntax validation, decoding, interning and owned results.
+[[nodiscard]] FileParseResult parse_line(std::string_view line);
 
 }  // namespace brier

@@ -29,7 +29,8 @@ A C++ order book engine and calibration study for Kalshi prediction markets. Bri
 | Calibration slope (95% CI) | TBD |
 | Imbalance hit rate, out of sample | TBD |
 
-Benchmark setup is in `engine/bench/README.md`. Null results are reported as null results.
+Benchmark commands and a local synthetic smoke measurement are in
+[engine/bench/README.md](engine/bench/README.md). Null results are reported as null results.
 
 ## Rules
 
@@ -67,6 +68,10 @@ thread counts. The default output directory is `replay_out`. `--validate` additi
 windows, and the first ten mismatch diffs. A REST sample matches any valid stream
 state during its request window; mismatches are reported with a successful exit.
 Validation requires nondecreasing receipt timestamps.
+`brier_synth` generates seeded streams; `brier_replay --bench` reports throughput
+and sampled update latency in `bench.json`. `brier_microbench` measures individual
+book operations and single-line parsing. See the benchmark guide for commands and
+measurement limits.
 See [the data format](docs/DATA_FORMAT.md#engine-replay-and-outputs) for record
 layout, counters, and exit codes.
 

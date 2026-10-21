@@ -1,6 +1,9 @@
 #include "brier/replay.hpp"
+#include "brier/benchmark.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <stdexcept>
 #include <exception>
 #include <numeric>
 #include <optional>
@@ -38,7 +41,7 @@ bool same_ranges(std::span<const PriceRange> a, std::span<const PriceRange> b) {
 // A market and its book belong to exactly one worker. Receipt times never
 // determine update order: the source-line order drives the book state.
 bool replay_market(const FileParseResult& input, const std::vector<std::size_t>& indices,
-                   MarketReplay& result, std::vector<TobRecord>* output) {
+                   MarketReplay& result, std::vector<TobRecord>* output, ReplayProfile* profile, std::size_t sample_every) {
     std::optional<Book> book;
     std::span<const PriceRange> ranges;
     std::size_t grid_size = 0;
@@ -72,7 +75,15 @@ bool replay_market(const FileParseResult& input, const std::vector<std::size_t>&
             if (!result.valid) {
                 ++result.dropped_deltas;
             } else {
-                result.error = book->apply_delta(event.side, event.price_ticks, event.quantity);
+                if (profile && ++profile->eligible_updates % sample_every == 0) {
+                    const auto start = std::chrono::steady_clock::now();
+                    result.error = book->apply_delta(event.side, event.price_ticks, event.quantity);
+                    const auto finish = std::chrono::steady_clock::now();
+                    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count();
+                    (void)profile->latency.record(static_cast<std::uint64_t>(ns));
+                } else {
+                    result.error = book->apply_delta(event.side, event.price_ticks, event.quantity);
+                }
                 result.valid = result.error == BookError::none;
                 if (result.valid) ++result.applied_deltas;
                 else ++result.invalid_updates;
@@ -123,10 +134,12 @@ struct Worker {
     std::vector<TobRecord> output;
     std::exception_ptr error;
     bool valid = true;
+    ReplayProfile profile;
 };
 }  // namespace
 
-ReplayResult replay(const FileParseResult& input, ReplayOptions options) {
+ReplayResult replay_impl(const FileParseResult& input, ReplayOptions options,
+                         ReplayProfile* profile, std::size_t sample_every) {
     ReplayResult result;
     if (options.threads == 0) {
         result.status = ReplayStatus::invalid_thread_count;
@@ -217,7 +230,8 @@ ReplayResult replay(const FileParseResult& input, ReplayOptions options) {
                 try {
                     for (const auto id : worker.markets) {
                         if (!replay_market(input, by_market[id], result.markets[id],
-                                           options.tob ? &worker.output : nullptr)) {
+                                           options.tob ? &worker.output : nullptr,
+                                           profile ? &worker.profile : nullptr, sample_every)) {
                             worker.valid = false;
                             return;
                         }
@@ -232,6 +246,14 @@ ReplayResult replay(const FileParseResult& input, ReplayOptions options) {
         if (worker.error) std::rethrow_exception(worker.error);
         if (!worker.valid) return {ReplayStatus::invalid_input, {}, {}};
     }
+    if (profile) {
+        for (const auto& worker : workers) {
+            profile->eligible_updates += worker.profile.eligible_updates;
+            if (!profile->latency.merge(worker.profile.latency)) {
+                throw std::overflow_error("Latency histogram count overflow");
+            }
+        }
+    }
     std::size_t rows = 0;
     for (const auto& worker : workers) rows += worker.output.size();
     result.tob.reserve(rows);
@@ -243,5 +265,16 @@ ReplayResult replay(const FileParseResult& input, ReplayOptions options) {
     });
     result.status = ReplayStatus::ok;
     return result;
+}
+ReplayResult replay(const FileParseResult& input, ReplayOptions options) {
+    return replay_impl(input, options, nullptr, 1);
+}
+
+ReplayProfile profile_replay(const FileParseResult& input, ReplayOptions options,
+                             std::size_t sample_every) {
+    if (sample_every == 0) throw std::invalid_argument("sample_every must be positive");
+    ReplayProfile profile;
+    profile.result = replay_impl(input, options, &profile, sample_every);
+    return profile;
 }
 }  // namespace brier

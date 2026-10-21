@@ -60,11 +60,17 @@ FetchContent_MakeAvailable(simdjson googletest benchmark)
 
 find_package(Threads REQUIRED)
 add_library(brier_engine STATIC engine/src/book.cpp engine/src/parse.cpp engine/src/replay.cpp
-  engine/src/validate.cpp)
+  engine/src/validate.cpp engine/src/benchmark.cpp)
 target_link_libraries(brier_engine PUBLIC brier_options PRIVATE simdjson Threads::Threads)
 
 add_executable(brier_replay engine/src/main_replay.cpp)
 target_link_libraries(brier_replay PRIVATE brier_engine)
+
+add_executable(brier_synth engine/src/main_synth.cpp)
+target_link_libraries(brier_synth PRIVATE brier_options)
+
+add_executable(brier_microbench engine/bench/bench_engine.cpp)
+target_link_libraries(brier_microbench PRIVATE brier_engine benchmark::benchmark_main)
 
 include(CTest)
 if(BUILD_TESTING)

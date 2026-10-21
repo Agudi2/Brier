@@ -1,4 +1,5 @@
 #include "brier/replay.hpp"
+#include "brier/benchmark.hpp"
 #include "brier/validate.hpp"
 
 #include <algorithm>
@@ -18,24 +19,27 @@
 
 namespace {
 constexpr std::string_view usage =
-    "Usage: brier_replay INPUT [--threads N] [--out DIR] [--tob] [--validate]\n"
+    "Usage: brier_replay INPUT [--threads N] [--out DIR] [--tob] [--validate] [--bench]\n"
     "Replay recorded market data; default output directory: replay_out.\n"
     "  --threads N  Positive worker limit (default: 1)\n"
     "  --out DIR    Write summary.json and markets.json here\n"
     "  --tob        Also write packed little-endian top-of-book records to tob.bin\n"
     "  --validate   Compare REST windows and write validation.json\n"
+    "  --bench      Write bench.json for worker limits 1..N (capped by hardware)\n"
+    "  --bench-runs R   Throughput repetitions per limit (default: 3)\n"
+    "  --sample-every K Sample every kth eligible delta per worker (default: 1000)\n"
     "  --help       Show this help\n"
     "Exit codes: 0 success/help, 2 usage, 3 input/validation, 4 output.\n";
 
 struct Arguments {
     std::filesystem::path input, output = "replay_out";
-    std::size_t threads = 1;
-    bool tob = false, validate = false, help = false;
+    std::size_t threads = 1, bench_runs = 3, sample_every = 1000;
+    bool tob = false, validate = false, help = false, bench = false;
 };
 
 std::optional<Arguments> arguments(int argc, char** argv) {
     Arguments args;
-    bool has_threads = false, has_output = false;
+    bool has_threads = false, has_output = false, has_runs = false, has_sampling = false;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
         if (arg == "--help") {
@@ -48,6 +52,19 @@ std::optional<Arguments> arguments(int argc, char** argv) {
                                                 args.threads);
             if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
                 args.threads == 0) return std::nullopt;
+        } else if (arg == "--bench") {
+            if (args.bench) return std::nullopt;
+            args.bench = true;
+        } else if (arg == "--bench-runs" || arg == "--sample-every") {
+            auto& seen = arg == "--bench-runs" ? has_runs : has_sampling;
+            if (seen || ++i == argc) return std::nullopt;
+            seen = true;
+            auto& number = arg == "--bench-runs" ? args.bench_runs : args.sample_every;
+            const std::string_view value(argv[i]);
+            const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
+            if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() || number == 0) {
+                return std::nullopt;
+            }
         } else if (arg == "--out") {
             if (has_output || ++i == argc || std::string_view(argv[i]).empty()) {
                 return std::nullopt;
@@ -67,7 +84,7 @@ std::optional<Arguments> arguments(int argc, char** argv) {
             args.input = arg;
         }
     }
-    if (args.input.empty() && !args.help) return std::nullopt;
+    if ((args.input.empty() || ((has_runs || has_sampling) && !args.bench)) && !args.help) return std::nullopt;
     return args;
 }
 
@@ -201,6 +218,69 @@ void write_validation(const std::filesystem::path& path,
     out.close();
 }
 
+double median(std::vector<double> values) {
+    std::sort(values.begin(), values.end());
+    const auto mid = values.size() / 2;
+    return values.size() % 2 != 0 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+}
+void durations(std::ostream& out, const std::vector<double>& values) {
+    out << '[';
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i != 0) out << ',';
+        out << values[i];
+    }
+    out << ']';
+}
+void quantile(std::ostream& out, const brier::LatencyHistogram& histogram, double p) {
+    if (const auto value = histogram.percentile(p)) out << *value;
+    else out << "null";
+}
+void write_benchmark(const std::filesystem::path& path, const brier::BenchmarkReport& report) {
+    auto out = open_output(path);
+    out << std::setprecision(std::numeric_limits<double>::max_digits10);
+    out << "{\"schema_version\":1,\"requested_threads\":" << report.requested_threads
+        << ",\"effective_max_threads\":" << report.rows.size()
+        << ",\"hardware_threads\":" << std::thread::hardware_concurrency()
+        << ",\"repetitions\":" << report.repetitions
+        << ",\"sample_every\":" << report.sample_every
+        << ",\"tob\":" << (report.tob ? "true" : "false")
+        << ",\"physical_lines\":" << report.physical_lines
+        << ",\"accepted_events\":" << report.accepted_events
+        << ",\"clock\":\"steady_clock\",\"clock_is_steady\":true"
+        << ",\"clock_overhead_ns\":{\"samples\":" << report.clock_overhead.count() << ",\"p50\":";
+    quantile(out, report.clock_overhead, 50);
+    out << ",\"p99\":";
+    quantile(out, report.clock_overhead, 99);
+    out << "},\"rows\":[";
+    bool first = true;
+    for (const auto& row : report.rows) {
+        if (!first) out << ',';
+        first = false;
+        const auto parse_seconds = median(row.parse_replay_seconds);
+        const auto replay_seconds = median(row.replay_only_seconds);
+        out << "{\"threads\":" << row.threads << ",\"parse_replay_seconds\":";
+        durations(out, row.parse_replay_seconds);
+        out << ",\"replay_only_seconds\":";
+        durations(out, row.replay_only_seconds);
+        out << ",\"parse_replay_median_seconds\":" << parse_seconds
+            << ",\"replay_only_median_seconds\":" << replay_seconds
+            << ",\"parse_replay_records_per_second\":";
+        if (parse_seconds > 0) out << static_cast<double>(report.physical_lines) / parse_seconds;
+        else out << "null";
+        out << ",\"replay_only_events_per_second\":";
+        if (replay_seconds > 0) out << static_cast<double>(report.accepted_events) / replay_seconds;
+        else out << "null";
+        out << ",\"eligible_updates\":" << row.eligible_updates
+            << ",\"latency_samples\":" << row.latency.count() << ",\"latency_p50_ns\":";
+        quantile(out, row.latency, 50);
+        out << ",\"latency_p99_ns\":";
+        quantile(out, row.latency, 99);
+        out << '}';
+    }
+    out << "]}\n";
+    out.close();
+}
+
 template<class T>
 void little_endian(std::ostream& out, T value) {
     // Conversion to unsigned is modulo 2^N, including the -1 price sentinel.
@@ -254,7 +334,12 @@ int main(int argc, char** argv) {
     brier::FileParseResult input;
     brier::ReplayResult replay;
     std::optional<brier::ValidationResult> validation;
+    std::optional<brier::BenchmarkReport> benchmark;
     try {
+        if (args->bench) {
+            benchmark = brier::benchmark_file(args->input, args->threads, args->bench_runs,
+                                             args->sample_every, args->tob);
+        }
         // Avoid allocating an unbounded chunk table for a user-supplied limit.
         const auto chunks = std::min(args->threads, static_cast<std::size_t>(
             std::max(1U, std::thread::hardware_concurrency())));
@@ -282,6 +367,7 @@ int main(int argc, char** argv) {
     try {
         write_outputs(*args, input, replay);
         if (validation) write_validation(args->output / "validation.json", *validation);
+        if (benchmark) write_benchmark(args->output / "bench.json", *benchmark);
     } catch (const std::exception& error) {
         std::cerr << "Output failure: " << error.what() << '\n';
         return 4;

@@ -511,4 +511,15 @@ FileParseResult parse_file(const std::filesystem::path& path, std::size_t chunks
     return merge(results);
 }
 
+FileParseResult parse_line(std::string_view line) {
+    if (line.empty() || line.find('\n') != std::string_view::npos) {
+        FileParseResult result;
+        result.status = ParseStatus::ok;
+        result.physical_lines = 1;
+        result.malformed.push_back({1, MalformedReason::invalid_json});
+        return result;
+    }
+    return parse_chunk(line, 0);
+}
+
 }  // namespace brier

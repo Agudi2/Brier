@@ -295,3 +295,34 @@ The CLI validates before writing outputs and returns exit code 3 on invalid
 validation input; write failures return 4 and may leave partial output files.
 Without `--validate`, an existing `validation.json` is left untouched. Use a fresh
 output directory when comparing runs.
+
+
+## Synthetic streams and benchmark output
+
+`brier_synth --out FILE [--messages N] [--markets M] [--seed S]` writes this v1
+NDJSON format without private data. Prices and quantities retain exact fixed-point
+strings. Market IDs are interned normally from SYNTH-prefixed ticker strings.
+It writes session open/close, metadata and initial snapshots plus N seeded
+activity records. It refuses existing output files; errors use exit 2 for usage
+and 4 for output. See the benchmark guide for distributions and memory limits.
+
+`brier_replay INPUT --bench [--threads N] [--bench-runs R] [--sample-every K]`
+adds `bench.json`. Ordinary replay/validation outputs retain their existing
+contents. The benchmark report is intentionally timing-dependent, unlike those
+artifacts. Without --bench, an existing bench.json is left untouched.
+
+Schema version 1 includes requested/effective worker limits, hardware concurrency,
+repetition count, sampling interval, TOB setting, physical line and accepted-event
+counts, steady clock identity, a clock-overhead histogram summary, and rows for
+worker limits 1..N capped by hardware. Each row contains raw parse/replay and
+replay-only seconds, their medians, physical records/s for parse/replay, accepted
+events/s for replay only, eligible update count, latency sample count, and raw
+sampled p50/p99 nanoseconds. No samples means null latency quantiles. Zero elapsed
+time produces a null rate rather than nonfinite JSON. Sampling is per worker on
+synchronized-book delta attempts; dropped deltas and snapshots are excluded.
+Clock overhead is reported without subtraction. Invalid input uses exit 3 and
+output failures use exit 4, as for ordinary replay.
+
+[Benchmark methods and reproducible commands](../engine/bench/README.md) describe
+what is inside the timing windows, histogram accuracy, cache conditions, CPU
+policy, pinning and the limitations of short sampled timings.
