@@ -46,7 +46,7 @@ python -m recorder.run --markets config/markets.yaml
 python -m recorder.compact data/2026-10-01.ndjson
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ./build/brier_replay data/2026-10-01.ndjson --threads N --out replay_out --tob --validate
-python -m study.backfill
+python -m study.backfill --scheduled-closes config/scheduled_closes.json --output data/study
 python -m study.calibration --horizons 24h 6h 1h
 ```
 
@@ -59,8 +59,8 @@ python -m study.calibration --horizons 24h 6h 1h
 ## Development
 
 Requires Python 3.12, uv, CMake 3.25+, and GCC 13+ or Clang 17+ on Linux or macOS.
-The recorder, compactor, engine replay, and validation against REST snapshots are
-available. The study commands will arrive in later stages.
+The recorder, compactor, engine replay, REST validation, and study dataset builder
+are available. Calibration and reporting commands will arrive in later stages.
 Replace `N` with the desired positive worker limit. Replay writes `summary.json`
 and `markets.json`; `--tob` also writes `tob.bin`. Outputs are deterministic across
 thread counts. The default output directory is `replay_out`. `--validate` additionally writes
@@ -74,6 +74,15 @@ book operations and single-line parsing. See the benchmark guide for commands an
 measurement limits.
 See [the data format](docs/DATA_FORMAT.md#engine-replay-and-outputs) for record
 layout, counters, and exit codes.
+
+Study backfill uses the read-only, rate-limited REST client and saves a reusable
+capture under `data/backfill`. `config/scheduled_closes.json` is a ticker-to-time
+JSON map of original scheduled close times, recorded before settlement, for example
+`{"EXAMPLE":"2026-10-21T20:00:00Z"}`. Missing original schedules are excluded;
+current close or expiration fields are not substituted. The command above writes
+partitioned YES-perspective rows and exclusion counts under `data/study`. Add
+`--tob-dir replay_out --max-spread-ticks 200` to use replay book midpoints, or omit
+`--output` and `--scheduled-closes` to capture a reusable API snapshot only.
 
 ```bash
 uv sync

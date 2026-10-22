@@ -326,3 +326,45 @@ output failures use exit 4, as for ordinary replay.
 [Benchmark methods and reproducible commands](../engine/bench/README.md) describe
 what is inside the timing windows, histogram accuracy, cache conditions, CPU
 policy, pinning and the limitations of short sampled timings.
+
+## Study dataset and REST backfill
+
+`python -m study.backfill --scheduled-closes config/scheduled_closes.json --output data/study`
+reads settled market metadata and exact trade history from both live and historical
+market-data endpoints. `GET /historical/cutoff` exposes independent boundaries for
+market settlement and trade creation; do not assume a market and its trades share a
+storage tier. The capture is cached in `data/backfill` by API base URL. Reusing a
+completed cache makes no requests. Remove the cache file or choose a fresh cache
+directory when a newer capture is needed. Only public market-data response bodies
+are cached. Authentication comes from the same environment variables as recording.
+
+The scheduled-close map must contain the original schedule recorded before the
+outcome was known. Values are ISO 8601 timestamps with explicit UTC offset or
+integer Unix nanoseconds. Current `close_time`, `expiration_time`, and
+`expected_expiration_time` in settled-market responses are not accepted as implicit
+scheduled anchors: they may reflect an early close or a later edit. A missing map
+entry gives `missing_scheduled_close`. The map is applied after loading raw cached
+data, so changing it does not force an API reread.
+
+Selection uses the last YES trade in the half-open window
+`(scheduled_close - horizon - lookback, scheduled_close - horizon]`. Prices are
+integer ticks of $0.0001; the output `p` is `price_ticks / 10000` regardless of the
+market's YES/NO result. `yes` maps to `y=1`, `no` to `y=0`; void and other outcomes
+are excluded. An empty window gives `no_trade_in_window`. Selection timestamps
+are preserved in each row for audit. Each attempted market/horizon pair appears
+exactly once as either a row or one exclusion count.
+
+The optional `--tob-dir replay_out` uses the engine's `tob.bin` and `markets.json`
+instead of trades. It selects the latest quote in the same window, requires a valid
+book with both YES bid and ask, and rejects crossed or wider-than-configured
+spreads. An invalidating quote cannot revive an older valid quote. The midpoint
+may have a half tick. Engine receipt timestamps and scheduled anchors are both
+Unix nanoseconds; they must refer to the same clock basis.
+
+`data/study/rows/horizon_ns=<integer>/part-0.parquet` contains the columns
+`ticker`, `event_ticker`, `series_ticker`, `category`, `scheduled_close_ns`,
+`horizon_ns`, `price_timestamp_ns`, `price_ticks`, `p`, and `y`.
+`data/study/exclusions.parquet` has `reason` and `count`. Each horizon partition
+retains its `horizon_ns` column. Rebuilding replaces the owned dataset directory,
+so old horizon partitions do not remain in the study sample. The dataset contains
+market-level rows; publish only aggregate statistics.
